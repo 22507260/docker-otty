@@ -1,0 +1,47 @@
+name: Bug report
+description: Report a reproducible problem in docker-otty
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened and what did you expect?
+      placeholder: Briefly describe the issue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide exact commands and inputs.
+      placeholder: |
+        1. Run `docker otty ...`
+        2. Use config `...`
+        3. Observe error `...`
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Docker version, Go version, plugin version.
+      placeholder: |
+        OS:
+        Docker:
+        Go:
+        docker-otty:
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or output
+      description: Paste relevant output or screenshots.
+      render: shell
+    validations:
+      required: false

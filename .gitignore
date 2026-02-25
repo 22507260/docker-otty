@@ -1,0 +1,22 @@
+# Build outputs
+/dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Local scan outputs
+/scan-results/
+
+# Local Trivy artifacts
+/trivy.exe
+/trivy.zip
+/trivy_*.zip
+
+# IDE/editor
+.vscode/
+.idea/
+
+# OS files
+Thumbs.db
+.DS_Store

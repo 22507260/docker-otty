@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (example: 1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+          cache: true
+
+      - name: Resolve release version
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "RELEASE_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Resolved version: $VERSION"
+
+      - name: Run release script
+        shell: pwsh
+        run: ./scripts/release.ps1 -Version $env:RELEASE_VERSION
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-otty-v${{ env.RELEASE_VERSION }}
+          path: dist/v${{ env.RELEASE_VERSION }}
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            dist/v${{ env.RELEASE_VERSION }}/*.zip
+            dist/v${{ env.RELEASE_VERSION }}/checksums.txt
+            dist/v${{ env.RELEASE_VERSION }}/CHANGELOG.md
+            dist/v${{ env.RELEASE_VERSION }}/LICENSE
+            dist/v${{ env.RELEASE_VERSION }}/README.md
+            dist/v${{ env.RELEASE_VERSION }}/VERSION

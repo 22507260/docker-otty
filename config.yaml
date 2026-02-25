@@ -1,0 +1,8 @@
+trivy_url: "./trivy_0.69.1_windows-64bit.zip"
+scan_images:
+  - "nginx:latest"
+  - "alpine:3.18"
+scan_installed_containers: false
+scan_running_containers: false
+interval: 3600
+output_dir: "./scan-results"
