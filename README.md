@@ -33,10 +33,6 @@
 - 🔍 Can scan explicit image lists, installed container images, and running container images
 ## Project Demo
 
-<p align="center">
-  <img src="assets/logo.png" alt="docker-otty demo" width="300" />
-</p>
-
 <!-- Ekran görüntüsü veya kısa bir terminal demosu ekleyebilirsiniz. -->
 ## Project Links & Community
 
