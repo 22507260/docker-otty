@@ -31,23 +31,6 @@
 - 🏃 Supports single, multi-image, and daemon scan modes
 - ✅ Adds CI gate controls for fail-fast pipelines
 - 🔍 Can scan explicit image lists, installed container images, and running container images
-## Project Demo
-
-<!-- Ekran görüntüsü veya kısa bir terminal demosu ekleyebilirsiniz. -->
-## Project Links & Community
-
-- [Contribution Guide](CONTRIBUTING.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Security Policy](SECURITY.md)
-- [Open Issues](https://github.com/22507260/docker-otty/issues)
-- [Discussions](https://github.com/22507260/docker-otty/discussions)
-## Social & Promotion
-
-- Projeyi [Twitter](https://twitter.com/) ve [LinkedIn](https://www.linkedin.com/) gibi platformlarda paylaşın.
-- Open source topluluklarına ve forumlara tanıtın.
-- Awesome list ve trending repo başvurusu yapın.
-
-> Daha fazla katkı ve yıldız için repoyu paylaşmayı unutmayın!
 
 ## Quick Start
 ### Prerequisites
