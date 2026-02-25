@@ -1,3 +1,4 @@
+
 # docker-otty
 
 <p align="center">
@@ -5,22 +6,52 @@
 </p>
 
 <p align="center">
-  Docker CLI plugin for Trivy-based container image security scanning.
+  <b>Docker CLI plugin for Trivy-based container image security scanning</b>
 </p>
 
 <p align="center">
-  <a href="LICENSE">License</a> |
-  <a href="CHANGELOG.md">Changelog</a> |
-  <a href="docs/USAGE.md">Usage Guide</a> |
-  <a href="docs/CONFIG.md">Config Guide</a>
+  <a href="https://github.com/22507260/docker-otty/actions/workflows/ci.yml"><img src="https://github.com/22507260/docker-otty/actions/workflows/ci.yml/badge.svg" alt="CI Status"></a>
+  <a href="https://github.com/22507260/docker-otty/releases"><img src="https://img.shields.io/github/v/release/22507260/docker-otty?include_prereleases&label=release" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/22507260/docker-otty" alt="License"></a>
+  <a href="https://github.com/22507260/docker-otty/stargazers"><img src="https://img.shields.io/github/stars/22507260/docker-otty?style=social" alt="GitHub stars"></a>
 </p>
 
-## Why docker-otty
-- Runs as a native Docker CLI plugin: `docker otty ...`
-- Produces practical reports in `txt`, `json`, or `md`
-- Supports single, multi-image, and daemon scan modes
-- Adds CI gate controls for fail-fast pipelines
-- Can scan explicit image lists, installed container images, and running container images
+<p align="center">
+  <a href="CHANGELOG.md">Changelog</a> |
+  <a href="docs/USAGE.md">Usage Guide</a> |
+  <a href="docs/CONFIG.md">Config Guide</a> |
+  <a href="CONTRIBUTING.md">Contributing</a> |
+  <a href="CODE_OF_CONDUCT.md">Code of Conduct</a>
+</p>
+
+## Why docker-otty?
+
+- 🚀 Runs as a native Docker CLI plugin: `docker otty ...`
+- 📄 Produces practical reports in `txt`, `json`, or `md`
+- 🏃 Supports single, multi-image, and daemon scan modes
+- ✅ Adds CI gate controls for fail-fast pipelines
+- 🔍 Can scan explicit image lists, installed container images, and running container images
+## Project Demo
+
+<p align="center">
+  <img src="assets/logo.png" alt="docker-otty demo" width="300" />
+</p>
+
+<!-- Ekran görüntüsü veya kısa bir terminal demosu ekleyebilirsiniz. -->
+## Project Links & Community
+
+- [Contribution Guide](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security Policy](SECURITY.md)
+- [Open Issues](https://github.com/22507260/docker-otty/issues)
+- [Discussions](https://github.com/22507260/docker-otty/discussions)
+## Social & Promotion
+
+- Projeyi [Twitter](https://twitter.com/) ve [LinkedIn](https://www.linkedin.com/) gibi platformlarda paylaşın.
+- Open source topluluklarına ve forumlara tanıtın.
+- Awesome list ve trending repo başvurusu yapın.
+
+> Daha fazla katkı ve yıldız için repoyu paylaşmayı unutmayın!
 
 ## Quick Start
 ### Prerequisites
