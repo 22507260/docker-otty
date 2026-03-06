@@ -145,7 +145,11 @@ func resolveTrivyArchivePath(trivyURL, destDir string) (string, bool, string, er
 }
 
 func inferReleaseDownloadURL(source string) (string, bool) {
-	assetName := filepath.Base(strings.TrimSpace(source))
+	assetName := strings.TrimSpace(source)
+	assetName = strings.TrimRight(assetName, `/\`)
+	if idx := strings.LastIndexAny(assetName, `/\`); idx >= 0 {
+		assetName = assetName[idx+1:]
+	}
 	if assetName == "" {
 		return "", false
 	}
