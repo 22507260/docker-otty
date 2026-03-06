@@ -287,3 +287,52 @@ func TestFindLatestBaselineReportForImage(t *testing.T) {
 		t.Fatalf("expected empty path for missing baseline, got %q", missing)
 	}
 }
+
+func TestNormalizeDoctorFormat(t *testing.T) {
+	tests := []struct {
+		in      string
+		want    string
+		wantErr bool
+	}{
+		{in: "", want: "txt"},
+		{in: "txt", want: "txt"},
+		{in: "JSON", want: "json"},
+		{in: "md", wantErr: true},
+	}
+
+	for _, tc := range tests {
+		got, err := normalizeDoctorFormat(tc.in)
+		if tc.wantErr && err == nil {
+			t.Fatalf("normalizeDoctorFormat(%q): expected error", tc.in)
+		}
+		if !tc.wantErr && err != nil {
+			t.Fatalf("normalizeDoctorFormat(%q): unexpected error: %v", tc.in, err)
+		}
+		if got != tc.want {
+			t.Fatalf("normalizeDoctorFormat(%q): got %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestDoctorStatusHelpers(t *testing.T) {
+	checks := []doctorCheck{
+		{Name: "config", Status: "pass"},
+		{Name: "docker", Status: "warn"},
+		{Name: "output", Status: "fail"},
+	}
+
+	if !doctorHasWarnings(checks) {
+		t.Fatalf("doctorHasWarnings should return true")
+	}
+	if !doctorHasFailures(checks) {
+		t.Fatalf("doctorHasFailures should return true")
+	}
+
+	passOnly := []doctorCheck{{Name: "config", Status: "pass"}}
+	if doctorHasWarnings(passOnly) {
+		t.Fatalf("doctorHasWarnings should return false for pass-only checks")
+	}
+	if doctorHasFailures(passOnly) {
+		t.Fatalf("doctorHasFailures should return false for pass-only checks")
+	}
+}

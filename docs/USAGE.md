@@ -115,6 +115,27 @@ docker otty daemon --interval 3600 --config config.yaml
 docker otty daemon --running-containers --once
 ```
 
+## `doctor` Command
+Run environment and config diagnostics.
+
+```bash
+docker otty doctor [options]
+```
+
+### Options
+| Option | Description |
+|---|---|
+| `--config <path>` | Config file path |
+| `--format <txt|json>` | Doctor report output format |
+| `--strict` | Treat warnings as failures (non-zero exit) |
+
+### Examples
+```bash
+docker otty doctor
+docker otty doctor --format json
+docker otty doctor --strict
+```
+
 ## Exit Codes
 - `0`: success
 - `1`: runtime error or CI gate violation default code
