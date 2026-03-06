@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OTTY GUI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-0: #f4f8ff;
+        --bg-1: #eaf6f1;
+        --ink: #172029;
+        --muted: #4f5d70;
+        --card: #ffffffcc;
+        --line: #d4dde8;
+        --accent: #146a8f;
+        --accent-2: #0e8f72;
+        --danger: #ba1a1a;
+        --ok: #0d7b44;
+        --shadow: 0 18px 45px rgba(20, 41, 66, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Space Grotesk", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 10% 15%, #d6f3e7 0%, transparent 36%),
+          radial-gradient(circle at 90% 10%, #dce9ff 0%, transparent 32%),
+          linear-gradient(135deg, var(--bg-0), var(--bg-1));
+      }
+
+      .wrap {
+        width: min(1080px, 92vw);
+        margin: 28px auto 56px;
+      }
+
+      .hero {
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+        border-radius: 20px;
+        backdrop-filter: blur(10px);
+        background: var(--card);
+        padding: 26px;
+        animation: rise 320ms ease-out;
+      }
+
+      .title {
+        margin: 0;
+        font-size: clamp(24px, 3.8vw, 34px);
+        letter-spacing: 0.02em;
+      }
+
+      .subtitle {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 15px;
+        max-width: 76ch;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 16px;
+        margin-top: 18px;
+      }
+
+      @media (min-width: 840px) {
+        .grid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      .field {
+        display: grid;
+        gap: 7px;
+      }
+
+      label {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      input,
+      select,
+      textarea {
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: #fff;
+        font-family: inherit;
+        color: inherit;
+        width: 100%;
+      }
+
+      input,
+      select {
+        height: 44px;
+        padding: 0 12px;
+      }
+
+      textarea {
+        padding: 12px;
+        min-height: 280px;
+        resize: vertical;
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 999px;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        color: #fff;
+        font-family: inherit;
+        font-weight: 700;
+        font-size: 14px;
+        letter-spacing: 0.01em;
+        padding: 12px 20px;
+        cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+        box-shadow: 0 8px 24px rgba(10, 91, 119, 0.25);
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+      }
+
+      button:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+
+      .status {
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      .status.error {
+        color: var(--danger);
+        font-weight: 600;
+      }
+
+      .status.ok {
+        color: var(--ok);
+        font-weight: 600;
+      }
+
+      .panels {
+        display: grid;
+        gap: 16px;
+        margin-top: 20px;
+        grid-template-columns: 1fr;
+      }
+
+      @media (min-width: 980px) {
+        .panels {
+          grid-template-columns: 1fr 1.2fr;
+        }
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        box-shadow: var(--shadow);
+        background: var(--card);
+        backdrop-filter: blur(8px);
+        padding: 18px;
+        animation: rise 340ms ease-out;
+      }
+
+      .card h2 {
+        margin: 0 0 14px;
+        font-size: 18px;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+      }
+
+      .metric {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px;
+        background: #fff;
+      }
+
+      .metric strong {
+        display: block;
+        font-size: 20px;
+        margin-top: 2px;
+      }
+
+      .meta {
+        margin-top: 12px;
+        font-size: 13px;
+        color: var(--muted);
+        word-break: break-all;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 8px;
+      }
+
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <section class="hero">
+        <h1 class="title">Docker OTTY Standalone GUI</h1>
+        <p class="subtitle">
+          This app runs as a standalone local program, not as an extension. It executes Trivy scans, writes reports, and shows details in one screen.
+        </p>
+
+        <div class="grid">
+          <div class="field">
+            <label for="image">Image</label>
+            <input id="image" type="text" value="alpine:3.18" />
+          </div>
+
+          <div class="field">
+            <label for="format">Report Format</label>
+            <select id="format">
+              <option value="json" selected>json</option>
+              <option value="txt">txt</option>
+              <option value="md">md</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="timeout">Timeout (seconds)</label>
+            <input id="timeout" type="number" min="30" step="10" value="300" />
+          </div>
+
+          <div class="field">
+            <label for="scanners">Scanners (comma separated)</label>
+            <input id="scanners" type="text" placeholder="vuln,secret,misconfig" />
+          </div>
+        </div>
+
+        <div class="row">
+          <button id="runBtn" type="button">Run Scan</button>
+          <span id="status" class="status">Ready</span>
+        </div>
+      </section>
+
+      <section class="panels">
+        <article class="card">
+          <h2>Summary</h2>
+          <div id="metrics" class="metrics">
+            <div class="metric"><span>Critical</span><strong id="mCritical">0</strong></div>
+            <div class="metric"><span>High</span><strong id="mHigh">0</strong></div>
+            <div class="metric"><span>Medium</span><strong id="mMedium">0</strong></div>
+            <div class="metric"><span>Low</span><strong id="mLow">0</strong></div>
+            <div class="metric"><span>Unknown</span><strong id="mUnknown">0</strong></div>
+            <div class="metric"><span>Clean Targets</span><strong id="mSafe">0</strong></div>
+          </div>
+          <div class="meta">
+            <div>Report: <span id="reportPath">-</span></div>
+            <div>Run At: <span id="runAt">-</span></div>
+          </div>
+          <h2 style="margin-top: 18px;">Top Explanations</h2>
+          <ul id="explanations">
+            <li>Explanations from the latest scan will appear here.</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h2>Raw Trivy JSON</h2>
+          <textarea id="rawJson" readonly></textarea>
+        </article>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

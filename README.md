@@ -42,6 +42,14 @@
 go build -o docker-otty.exe .
 ```
 
+### Build Standalone GUI
+```powershell
+go build -o otty-gui.exe ./cmd/otty-gui
+.\otty-gui.exe
+```
+
+`otty-gui` is a separate local application. It is not a Docker Desktop extension.
+
 ### Install as Docker CLI plugin (Windows)
 ```powershell
 New-Item -ItemType Directory -Force "$HOME\.docker\cli-plugins" | Out-Null

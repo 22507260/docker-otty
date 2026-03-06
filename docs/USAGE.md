@@ -2,6 +2,22 @@
 
 This guide covers day-to-day usage of `docker-otty`.
 
+## Standalone GUI
+`otty-gui` runs as a separate local application (not an extension).
+
+```powershell
+go build -o otty-gui.exe ./cmd/otty-gui
+.\otty-gui.exe
+```
+
+Optional flags:
+
+| Flag | Description |
+|---|---|
+| `--config <path>` | Config file path (default: `config.yaml`) |
+| `--addr <host:port>` | HTTP listen address (default: `127.0.0.1:8787`) |
+| `--no-open` | Do not auto-open the browser |
+
 ## Global Flags
 | Flag | Description |
 |---|---|
