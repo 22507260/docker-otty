@@ -111,6 +111,7 @@ type multiResult struct {
 	Summary      scanSummary
 	Severity     severityCounts
 	Explanations []string
+	ParsedReport trivyReport
 	Err          error
 }
 
@@ -118,6 +119,8 @@ type multiSummaryImage struct {
 	Image                        string `json:"image"`
 	Status                       string `json:"status"`
 	Report                       string `json:"report,omitempty"`
+	BaselineReport               string `json:"baseline_report,omitempty"`
+	BaselineStatus               string `json:"baseline_status,omitempty"`
 	Error                        string `json:"error,omitempty"`
 	CriticalHighRiskFindingCount int    `json:"critical_high_risk_finding_count"`
 	MediumLowRiskFindingCount    int    `json:"medium_low_risk_finding_count"`
@@ -127,16 +130,27 @@ type multiSummaryImage struct {
 	MediumFindingCount           int    `json:"medium_finding_count"`
 	LowFindingCount              int    `json:"low_finding_count"`
 	UnknownFindingCount          int    `json:"unknown_finding_count"`
+	NewFindingCount              int    `json:"new_finding_count"`
+	NewCriticalFindingCount      int    `json:"new_critical_finding_count"`
+	NewHighFindingCount          int    `json:"new_high_finding_count"`
+	NewMediumFindingCount        int    `json:"new_medium_finding_count"`
+	NewLowFindingCount           int    `json:"new_low_finding_count"`
+	NewUnknownFindingCount       int    `json:"new_unknown_finding_count"`
 	CIGateStatus                 string `json:"ci_gate_status,omitempty"`
+	NewCIGateStatus              string `json:"new_ci_gate_status,omitempty"`
 }
 
 type multiSummaryReport struct {
 	RunAt                        string              `json:"run_at"`
 	Format                       string              `json:"format"`
+	BaselineDir                  string              `json:"baseline_dir,omitempty"`
 	Workers                      int                 `json:"workers"`
 	TotalImages                  int                 `json:"total_images"`
 	SuccessCount                 int                 `json:"success_count"`
 	FailedCount                  int                 `json:"failed_count"`
+	BaselineComparedCount        int                 `json:"baseline_compared_count"`
+	BaselineMissingCount         int                 `json:"baseline_missing_count"`
+	BaselineErrorCount           int                 `json:"baseline_error_count"`
 	CombinedCriticalHighFindings int                 `json:"combined_critical_high_findings"`
 	CombinedMediumLowFindings    int                 `json:"combined_medium_low_findings"`
 	CombinedCleanTargets         int                 `json:"combined_clean_targets"`
@@ -145,6 +159,12 @@ type multiSummaryReport struct {
 	CombinedMediumFindings       int                 `json:"combined_medium_findings"`
 	CombinedLowFindings          int                 `json:"combined_low_findings"`
 	CombinedUnknownFindings      int                 `json:"combined_unknown_findings"`
+	CombinedNewFindings          int                 `json:"combined_new_findings"`
+	CombinedNewCriticalFindings  int                 `json:"combined_new_critical_findings"`
+	CombinedNewHighFindings      int                 `json:"combined_new_high_findings"`
+	CombinedNewMediumFindings    int                 `json:"combined_new_medium_findings"`
+	CombinedNewLowFindings       int                 `json:"combined_new_low_findings"`
+	CombinedNewUnknownFindings   int                 `json:"combined_new_unknown_findings"`
 	Images                       []multiSummaryImage `json:"images"`
 }
 
@@ -491,6 +511,11 @@ func printHelp() {
 	fmt.Println("  --workers        Worker count for multi scan")
 	fmt.Println("  --fail-on        CI gate: high|critical|none")
 	fmt.Println("  --max-medium     CI gate: maximum allowed medium findings")
+	fmt.Println("  --baseline       Baseline report path for run new-finding comparison")
+	fmt.Println("  --baseline-dir   Baseline report directory for multi new-finding comparison")
+	fmt.Println("  --baseline-required  Fail if a baseline report cannot be matched in multi mode")
+	fmt.Println("  --fail-on-new    New-finding gate: high|critical|none (requires baseline)")
+	fmt.Println("  --max-new-medium New-finding gate: maximum allowed medium findings (requires baseline)")
 	fmt.Println("  --exit-code      Exit code to return when CI gate fails")
 	fmt.Println("  --once           Run daemon only once")
 }
@@ -512,30 +537,37 @@ func printPluginMetadata() {
 }
 
 func interactiveMainMenu(opts appOptions) {
-	fmt.Println("docker otty - Interactive Mode")
-	fmt.Println("1) Single scan (run)")
-	fmt.Println("2) Multiple scan (multi)")
-	fmt.Println("3) Daemon mode")
-	fmt.Println("4) Help")
+	for {
+		fmt.Println("docker otty - Interactive Mode")
+		fmt.Println("1) Single scan (run)")
+		fmt.Println("2) Multiple scan (multi)")
+		fmt.Println("3) Daemon mode")
+		fmt.Println("4) Help")
+		fmt.Println("5) Exit")
 
-	choice := askNonEmpty("Choose an option (1/2/3/4)")
-	switch choice {
-	case "1":
-		if err := runCommand(nil, opts); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+		choice := strings.ToLower(strings.TrimSpace(askNonEmpty("Choose an option (1/2/3/4/5)")))
+		switch choice {
+		case "1":
+			if err := runCommand(nil, opts); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+			}
+		case "2":
+			if err := multiCommand(nil, opts); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+			}
+		case "3":
+			if err := daemonCommand(nil, opts); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+			}
+		case "4":
+			printHelp()
+		case "5", "q", "quit", "exit":
+			fmt.Println("Exiting interactive mode.")
+			return
+		default:
+			fmt.Println("Invalid choice.")
 		}
-	case "2":
-		if err := multiCommand(nil, opts); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-		}
-	case "3":
-		if err := daemonCommand(nil, opts); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-		}
-	case "4":
-		printHelp()
-	default:
-		fmt.Println("Invalid choice.")
+		fmt.Println("")
 	}
 }
 
@@ -545,6 +577,8 @@ func runCommand(args []string, opts appOptions) error {
 	scanOptions := defaultScanExecOptions()
 	image := ""
 	ciOptions := newCIGateOptions()
+	baselinePath := ""
+	newFindingGateOptions := newCIGateOptions()
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -610,6 +644,35 @@ func runCommand(args []string, opts appOptions) error {
 			}
 			ciOptions.FailOn = failOn
 			i++
+		case "--baseline":
+			if i+1 >= len(args) {
+				return errors.New("--baseline requires a file path")
+			}
+			baselinePath = strings.TrimSpace(args[i+1])
+			if baselinePath == "" {
+				return errors.New("--baseline requires a non-empty file path")
+			}
+			i++
+		case "--fail-on-new":
+			if i+1 >= len(args) {
+				return errors.New("--fail-on-new requires a value (high|critical|none)")
+			}
+			failOn, err := parseFailOn(args[i+1])
+			if err != nil {
+				return err
+			}
+			newFindingGateOptions.FailOn = failOn
+			i++
+		case "--max-new-medium":
+			if i+1 >= len(args) {
+				return errors.New("--max-new-medium requires a number")
+			}
+			maxMedium, err := strconv.Atoi(args[i+1])
+			if err != nil || maxMedium < 0 {
+				return fmt.Errorf("invalid --max-new-medium value: %s", args[i+1])
+			}
+			newFindingGateOptions.MaxMedium = maxMedium
+			i++
 		case "--max-medium":
 			if i+1 >= len(args) {
 				return errors.New("--max-medium requires a number")
@@ -629,9 +692,10 @@ func runCommand(args []string, opts appOptions) error {
 				return fmt.Errorf("invalid --exit-code value: %s", args[i+1])
 			}
 			ciOptions.ExitCode = exitCode
+			newFindingGateOptions.ExitCode = exitCode
 			i++
 		case "--help", "-h":
-			fmt.Println("Usage: docker otty run <image> [--config <path>] [--output <report-file>] [--format <txt|json|md>] [--top <n>] [--timeout <seconds>] [--scanners <csv>] [--fail-on <high|critical|none>] [--max-medium <n>] [--exit-code <n>]")
+			fmt.Println("Usage: docker otty run <image> [--config <path>] [--output <report-file>] [--format <txt|json|md>] [--top <n>] [--timeout <seconds>] [--scanners <csv>] [--fail-on <high|critical|none>] [--max-medium <n>] [--baseline <report.json>] [--fail-on-new <high|critical|none>] [--max-new-medium <n>] [--exit-code <n>]")
 			return nil
 		default:
 			if strings.HasPrefix(args[i], "-") {
@@ -652,6 +716,9 @@ func runCommand(args []string, opts appOptions) error {
 	}
 	if !isValidImageName(image) {
 		return fmt.Errorf("invalid image name: %s", image)
+	}
+	if baselinePath == "" && (newFindingGateOptions.FailOn != "" || newFindingGateOptions.MaxMedium >= 0) {
+		return errors.New("--fail-on-new and --max-new-medium require --baseline <report.json>")
 	}
 
 	cfg, cfgPath, err := loadConfigInteractive(configPath, opts)
@@ -675,10 +742,20 @@ func runCommand(args []string, opts appOptions) error {
 		return err
 	}
 
+	hasBaseline := strings.TrimSpace(baselinePath) != ""
+	var baselineReport trivyReport
+	if hasBaseline {
+		baselineReport, err = loadBaselineReport(baselinePath)
+		if err != nil {
+			return fmt.Errorf("failed to load baseline report: %w", err)
+		}
+		fmt.Println("Baseline report:", baselinePath)
+	}
+
 	if !confirm(opts, fmt.Sprintf("Start scan for image: %s?", image), true) {
 		return errors.New("operation cancelled")
 	}
-	summary, severity, explanations, err := runSingleScan(bin, image, outFile, scanOptions)
+	summary, severity, explanations, parsedReport, err := runSingleScan(bin, image, outFile, scanOptions)
 	if err != nil {
 		return fmt.Errorf("scan failed: %w", err)
 	}
@@ -694,10 +771,40 @@ func runCommand(args []string, opts appOptions) error {
 	}
 	fmt.Println("Report:", outFile)
 
+	errorParts := make([]string, 0)
+	if hasBaseline {
+		newSeverity, newExplanations, newCount := compareNewFindings(parsedReport, baselineReport, scanOptions.ExplanationLimit)
+		fmt.Printf(
+			"New Findings vs Baseline: %d (critical=%d, high=%d, medium=%d, low=%d, unknown=%d)\n",
+			newCount,
+			newSeverity.Critical,
+			newSeverity.High,
+			newSeverity.Medium,
+			newSeverity.Low,
+			newSeverity.Unknown,
+		)
+		if newCount == 0 {
+			fmt.Println("No new findings were introduced compared to baseline.")
+		} else {
+			fmt.Println("Top New Findings:")
+			for _, item := range newExplanations {
+				fmt.Println("-", item)
+			}
+		}
+
+		newFindingViolations := evaluateCIGate(newSeverity, newFindingGateOptions)
+		if len(newFindingViolations) > 0 {
+			errorParts = append(errorParts, "new-finding gate failed: "+strings.Join(newFindingViolations, " | "))
+		}
+	}
+
 	violations := evaluateCIGate(severity, ciOptions)
 	if len(violations) > 0 {
+		errorParts = append(errorParts, "CI gate failed: "+strings.Join(violations, " | "))
+	}
+	if len(errorParts) > 0 {
 		return &commandError{
-			message:  "CI gate failed: " + strings.Join(violations, " | "),
+			message:  strings.Join(errorParts, " ; "),
 			exitCode: ciOptions.ExitCode,
 		}
 	}
@@ -710,6 +817,9 @@ func multiCommand(args []string, opts appOptions) error {
 	scanOptions := defaultScanExecOptions()
 	workers := 4
 	ciOptions := newCIGateOptions()
+	newFindingGateOptions := newCIGateOptions()
+	baselineDir := ""
+	baselineRequired := false
 	images := make([]string, 0)
 	includeInstalledContainers := false
 	includeRunningContainers := false
@@ -798,6 +908,37 @@ func multiCommand(args []string, opts appOptions) error {
 			}
 			ciOptions.FailOn = failOn
 			i++
+		case "--baseline-dir":
+			if i+1 >= len(args) {
+				return errors.New("--baseline-dir requires a directory path")
+			}
+			baselineDir = strings.TrimSpace(args[i+1])
+			if baselineDir == "" {
+				return errors.New("--baseline-dir requires a non-empty directory path")
+			}
+			i++
+		case "--baseline-required":
+			baselineRequired = true
+		case "--fail-on-new":
+			if i+1 >= len(args) {
+				return errors.New("--fail-on-new requires a value (high|critical|none)")
+			}
+			failOn, err := parseFailOn(args[i+1])
+			if err != nil {
+				return err
+			}
+			newFindingGateOptions.FailOn = failOn
+			i++
+		case "--max-new-medium":
+			if i+1 >= len(args) {
+				return errors.New("--max-new-medium requires a number")
+			}
+			maxMedium, err := strconv.Atoi(args[i+1])
+			if err != nil || maxMedium < 0 {
+				return fmt.Errorf("invalid --max-new-medium value: %s", args[i+1])
+			}
+			newFindingGateOptions.MaxMedium = maxMedium
+			i++
 		case "--max-medium":
 			if i+1 >= len(args) {
 				return errors.New("--max-medium requires a number")
@@ -817,9 +958,10 @@ func multiCommand(args []string, opts appOptions) error {
 				return fmt.Errorf("invalid --exit-code value: %s", args[i+1])
 			}
 			ciOptions.ExitCode = exitCode
+			newFindingGateOptions.ExitCode = exitCode
 			i++
 		case "--help", "-h":
-			fmt.Println("Usage: docker otty multi <image1> <image2> ... [--images <img1,img2>] [--containers|--container] [--running-containers|--running-container] [--config <path>] [--output-dir <dir>] [--format <txt|json|md>] [--top <n>] [--timeout <seconds>] [--scanners <csv>] [--workers <n>] [--fail-on <high|critical|none>] [--max-medium <n>] [--exit-code <n>]")
+			fmt.Println("Usage: docker otty multi <image1> <image2> ... [--images <img1,img2>] [--containers|--container] [--running-containers|--running-container] [--config <path>] [--output-dir <dir>] [--format <txt|json|md>] [--top <n>] [--timeout <seconds>] [--scanners <csv>] [--workers <n>] [--fail-on <high|critical|none>] [--max-medium <n>] [--baseline-dir <dir>] [--baseline-required] [--fail-on-new <high|critical|none>] [--max-new-medium <n>] [--exit-code <n>]")
 			fmt.Println("Tip: if no image is provided, scan_images from config and optional container discovery will be used.")
 			return nil
 		default:
@@ -828,6 +970,9 @@ func multiCommand(args []string, opts appOptions) error {
 			}
 			appendImageCandidates(&images, args[i])
 		}
+	}
+	if baselineDir == "" && (newFindingGateOptions.FailOn != "" || newFindingGateOptions.MaxMedium >= 0 || baselineRequired) {
+		return errors.New("--fail-on-new, --max-new-medium, and --baseline-required require --baseline-dir <dir>")
 	}
 
 	cfg, cfgPath, err := loadConfigInteractive(configPath, opts)
@@ -923,6 +1068,15 @@ func multiCommand(args []string, opts appOptions) error {
 	if err != nil {
 		return err
 	}
+	resolvedBaselineDir := ""
+	baselineEnabled := strings.TrimSpace(baselineDir) != ""
+	if baselineEnabled {
+		resolvedBaselineDir, err = resolveBaselineDir(baselineDir)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Baseline directory: %s\n", resolvedBaselineDir)
+	}
 	if workers > len(images) {
 		workers = len(images)
 	}
@@ -948,12 +1102,13 @@ func multiCommand(args []string, opts appOptions) error {
 	for w := 0; w < workers; w++ {
 		go func() {
 			for task := range tasks {
-				summary, severity, explanations, scanErr := runSingleScan(bin, task.Image, task.OutFile, workerScanOptions)
+				summary, severity, explanations, parsedReport, scanErr := runSingleScan(bin, task.Image, task.OutFile, workerScanOptions)
 				results <- multiResult{
 					Task:         task,
 					Summary:      summary,
 					Severity:     severity,
 					Explanations: explanations,
+					ParsedReport: parsedReport,
 					Err:          scanErr,
 				}
 			}
@@ -974,15 +1129,22 @@ func multiCommand(args []string, opts appOptions) error {
 
 	combined := scanSummary{}
 	combinedSeverity := severityCounts{}
+	combinedNewSeverity := severityCounts{}
+	combinedNewFindings := 0
 	successCount := 0
 	failedCount := 0
 	ciFailures := make([]string, 0)
+	newFindingFailures := make([]string, 0)
+	baselineIssues := make([]string, 0)
 	summaryPayload := multiSummaryReport{
 		RunAt:       time.Now().Format(time.RFC3339),
 		Format:      scanOptions.ReportFormat,
 		Workers:     workers,
 		TotalImages: len(images),
 		Images:      make([]multiSummaryImage, 0, len(images)),
+	}
+	if baselineEnabled {
+		summaryPayload.BaselineDir = resolvedBaselineDir
 	}
 
 	for idx, result := range orderedResults {
@@ -995,7 +1157,10 @@ func multiCommand(args []string, opts appOptions) error {
 				Status:           "failed",
 				Error:            result.Err.Error(),
 				CIGateStatus:     "not-evaluated",
+				NewCIGateStatus:  "not-evaluated",
 				CleanTargetCount: 0,
+				BaselineStatus:   "not-evaluated",
+				NewFindingCount:  0,
 			})
 			continue
 		}
@@ -1033,11 +1198,85 @@ func multiCommand(args []string, opts appOptions) error {
 			LowFindingCount:              result.Severity.Low,
 			UnknownFindingCount:          result.Severity.Unknown,
 			CIGateStatus:                 "pass",
+			NewCIGateStatus:              "not-evaluated",
 		}
 		violations := evaluateCIGate(result.Severity, ciOptions)
 		if len(violations) > 0 {
 			imageEntry.CIGateStatus = "fail"
 			ciFailures = append(ciFailures, fmt.Sprintf("%s => %s", result.Task.Image, strings.Join(violations, ", ")))
+		}
+
+		if baselineEnabled {
+			baselinePath, findErr := findLatestBaselineReportForImage(resolvedBaselineDir, result.Task.Image)
+			if findErr != nil {
+				imageEntry.BaselineStatus = "error"
+				summaryPayload.BaselineErrorCount++
+				fmt.Println("Baseline lookup error:", findErr)
+				if baselineRequired {
+					baselineIssues = append(baselineIssues, fmt.Sprintf("%s => failed to find baseline report: %v", result.Task.Image, findErr))
+				}
+			} else if baselinePath == "" {
+				imageEntry.BaselineStatus = "missing"
+				summaryPayload.BaselineMissingCount++
+				fmt.Println("Baseline report: not found for image", result.Task.Image)
+				if baselineRequired {
+					baselineIssues = append(baselineIssues, fmt.Sprintf("%s => no baseline report found in %s", result.Task.Image, resolvedBaselineDir))
+				}
+			} else {
+				imageEntry.BaselineStatus = "loaded"
+				imageEntry.BaselineReport = baselinePath
+				baselineReport, baselineErr := loadBaselineReport(baselinePath)
+				if baselineErr != nil {
+					imageEntry.BaselineStatus = "error"
+					imageEntry.BaselineReport = ""
+					summaryPayload.BaselineErrorCount++
+					fmt.Println("Baseline load error:", baselineErr)
+					if baselineRequired {
+						baselineIssues = append(baselineIssues, fmt.Sprintf("%s => failed to parse baseline report %s: %v", result.Task.Image, baselinePath, baselineErr))
+					}
+				} else {
+					summaryPayload.BaselineComparedCount++
+					newSeverity, newExplanations, newCount := compareNewFindings(result.ParsedReport, baselineReport, scanOptions.ExplanationLimit)
+					imageEntry.NewFindingCount = newCount
+					imageEntry.NewCriticalFindingCount = newSeverity.Critical
+					imageEntry.NewHighFindingCount = newSeverity.High
+					imageEntry.NewMediumFindingCount = newSeverity.Medium
+					imageEntry.NewLowFindingCount = newSeverity.Low
+					imageEntry.NewUnknownFindingCount = newSeverity.Unknown
+
+					combinedNewFindings += newCount
+					combinedNewSeverity.Critical += newSeverity.Critical
+					combinedNewSeverity.High += newSeverity.High
+					combinedNewSeverity.Medium += newSeverity.Medium
+					combinedNewSeverity.Low += newSeverity.Low
+					combinedNewSeverity.Unknown += newSeverity.Unknown
+
+					fmt.Printf(
+						"New Findings vs Baseline: %d (critical=%d, high=%d, medium=%d, low=%d, unknown=%d)\n",
+						newCount,
+						newSeverity.Critical,
+						newSeverity.High,
+						newSeverity.Medium,
+						newSeverity.Low,
+						newSeverity.Unknown,
+					)
+					if newCount == 0 {
+						fmt.Println("No new findings were introduced compared to baseline.")
+					} else {
+						fmt.Println("Top New Findings:")
+						for _, item := range newExplanations {
+							fmt.Println("-", item)
+						}
+					}
+
+					newFindingViolations := evaluateCIGate(newSeverity, newFindingGateOptions)
+					imageEntry.NewCIGateStatus = "pass"
+					if len(newFindingViolations) > 0 {
+						imageEntry.NewCIGateStatus = "fail"
+						newFindingFailures = append(newFindingFailures, fmt.Sprintf("%s => %s", result.Task.Image, strings.Join(newFindingViolations, ", ")))
+					}
+				}
+			}
 		}
 		summaryPayload.Images = append(summaryPayload.Images, imageEntry)
 	}
@@ -1052,6 +1291,12 @@ func multiCommand(args []string, opts appOptions) error {
 	summaryPayload.CombinedMediumFindings = combinedSeverity.Medium
 	summaryPayload.CombinedLowFindings = combinedSeverity.Low
 	summaryPayload.CombinedUnknownFindings = combinedSeverity.Unknown
+	summaryPayload.CombinedNewFindings = combinedNewFindings
+	summaryPayload.CombinedNewCriticalFindings = combinedNewSeverity.Critical
+	summaryPayload.CombinedNewHighFindings = combinedNewSeverity.High
+	summaryPayload.CombinedNewMediumFindings = combinedNewSeverity.Medium
+	summaryPayload.CombinedNewLowFindings = combinedNewSeverity.Low
+	summaryPayload.CombinedNewUnknownFindings = combinedNewSeverity.Unknown
 
 	summaryFile, summaryErr := writeMultiSummaryReport(outDir, summaryPayload)
 	if summaryErr != nil {
@@ -1063,6 +1308,23 @@ func multiCommand(args []string, opts appOptions) error {
 		"Combined Critical/High Risk Findings: %d - Combined Medium/Low Risk Findings: %d - Combined Clean Targets: %d\n",
 		combined.DefiniteMalicious, combined.Suspicious, combined.Safe,
 	)
+	if baselineEnabled {
+		fmt.Printf(
+			"Combined New Findings vs Baseline: %d (critical=%d, high=%d, medium=%d, low=%d, unknown=%d)\n",
+			combinedNewFindings,
+			combinedNewSeverity.Critical,
+			combinedNewSeverity.High,
+			combinedNewSeverity.Medium,
+			combinedNewSeverity.Low,
+			combinedNewSeverity.Unknown,
+		)
+		fmt.Printf(
+			"Baseline Comparison: compared=%d, missing=%d, error=%d\n",
+			summaryPayload.BaselineComparedCount,
+			summaryPayload.BaselineMissingCount,
+			summaryPayload.BaselineErrorCount,
+		)
+	}
 	fmt.Println("Summary Report:", summaryFile)
 
 	if successCount == 0 {
@@ -1075,6 +1337,14 @@ func multiCommand(args []string, opts appOptions) error {
 	}
 	if len(ciFailures) > 0 {
 		errorParts = append(errorParts, fmt.Sprintf("CI gate failed for %d image(s): %s", len(ciFailures), strings.Join(ciFailures, " | ")))
+	}
+	if len(newFindingFailures) > 0 {
+		errorParts = append(errorParts, fmt.Sprintf("new-finding gate failed for %d image(s): %s", len(newFindingFailures), strings.Join(newFindingFailures, " | ")))
+	}
+	if len(baselineIssues) > 0 {
+		errorParts = append(errorParts, fmt.Sprintf("baseline requirements failed for %d image(s): %s", len(baselineIssues), strings.Join(baselineIssues, " | ")))
+	}
+	if len(ciFailures) > 0 || len(newFindingFailures) > 0 || len(baselineIssues) > 0 {
 		return &commandError{
 			message:  strings.Join(errorParts, " ; "),
 			exitCode: ciOptions.ExitCode,
@@ -1131,6 +1401,71 @@ func resolveOutputDir(dir string) (string, error) {
 		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
 	return outDir, nil
+}
+
+func resolveBaselineDir(dir string) (string, error) {
+	baselineDir := strings.TrimSpace(dir)
+	if baselineDir == "" {
+		return "", errors.New("--baseline-dir requires a non-empty directory path")
+	}
+
+	baselineDir = filepath.Clean(baselineDir)
+	info, err := os.Stat(baselineDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to access baseline directory: %w", err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("baseline path is not a directory: %s", baselineDir)
+	}
+
+	abs, absErr := filepath.Abs(baselineDir)
+	if absErr != nil {
+		return baselineDir, nil
+	}
+	return abs, nil
+}
+
+type baselineFileCandidate struct {
+	Path    string
+	ModTime time.Time
+}
+
+func findLatestBaselineReportForImage(baselineDir, image string) (string, error) {
+	if strings.TrimSpace(baselineDir) == "" {
+		return "", nil
+	}
+
+	pattern := filepath.Join(baselineDir, fmt.Sprintf("%s-scan-*.json", sanitizeScanFileName(image)))
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return "", fmt.Errorf("invalid baseline report search pattern for %s: %w", image, err)
+	}
+	if len(matches) == 0 {
+		return "", nil
+	}
+
+	candidates := make([]baselineFileCandidate, 0, len(matches))
+	for _, path := range matches {
+		info, statErr := os.Stat(path)
+		if statErr != nil || info.IsDir() {
+			continue
+		}
+		candidates = append(candidates, baselineFileCandidate{
+			Path:    path,
+			ModTime: info.ModTime(),
+		})
+	}
+	if len(candidates) == 0 {
+		return "", nil
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		if !candidates[i].ModTime.Equal(candidates[j].ModTime) {
+			return candidates[i].ModTime.After(candidates[j].ModTime)
+		}
+		return candidates[i].Path > candidates[j].Path
+	})
+	return candidates[0].Path, nil
 }
 
 func writeMultiSummaryReport(outDir string, summary multiSummaryReport) (string, error) {
@@ -1333,7 +1668,7 @@ func daemonCommand(args []string, opts appOptions) error {
 		for _, image := range validImages {
 			outFile := filepath.Join(outDir, fmt.Sprintf("%s-scan-%s%s", sanitizeScanFileName(image), timestampSuffix(time.Now()), reportFileExtension(scanOptions.ReportFormat)))
 			fmt.Println("Scanning:", image)
-			summary, _, explanations, err := runSingleScan(bin, image, outFile, scanOptions)
+			summary, _, explanations, _, err := runSingleScan(bin, image, outFile, scanOptions)
 			if err != nil {
 				fmt.Println("Scan error:", err)
 				continue
@@ -1356,9 +1691,10 @@ func daemonCommand(args []string, opts appOptions) error {
 	}
 }
 
-func runSingleScan(trivyBin, image, outFile string, options scanExecOptions) (scanSummary, severityCounts, []string, error) {
+func runSingleScan(trivyBin, image, outFile string, options scanExecOptions) (scanSummary, severityCounts, []string, trivyReport, error) {
 	var summary scanSummary
 	var severity severityCounts
+	var parsed trivyReport
 	timeoutSeconds := options.TimeoutSeconds
 	if timeoutSeconds <= 0 {
 		timeoutSeconds = 300
@@ -1383,21 +1719,20 @@ func runSingleScan(trivyBin, image, outFile string, options scanExecOptions) (sc
 	err := cmd.Run()
 
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return summary, severity, nil, fmt.Errorf("trivy command timed out (%d seconds)", timeoutSeconds)
+		return summary, severity, nil, parsed, fmt.Errorf("trivy command timed out (%d seconds)", timeoutSeconds)
 	}
 
 	trivyStdout := strings.TrimSpace(stdout.String())
 	trivyStderr := strings.TrimSpace(stderr.String())
 	if err != nil && trivyStdout == "" {
-		return summary, severity, nil, fmt.Errorf("trivy command failed: %w. stderr: %s", err, trivyStderr)
+		return summary, severity, nil, parsed, fmt.Errorf("trivy command failed: %w. stderr: %s", err, trivyStderr)
 	}
 	if trivyStdout == "" {
-		return summary, severity, nil, errors.New("trivy did not return JSON output")
+		return summary, severity, nil, parsed, errors.New("trivy did not return JSON output")
 	}
 
-	var parsed trivyReport
 	if parseErr := json.Unmarshal(stdout.Bytes(), &parsed); parseErr != nil {
-		return summary, severity, nil, fmt.Errorf("failed to parse trivy JSON output: %w", parseErr)
+		return summary, severity, nil, parsed, fmt.Errorf("failed to parse trivy JSON output: %w", parseErr)
 	}
 
 	summary, severity = analyzeTrivyReport(parsed)
@@ -1412,20 +1747,156 @@ func runSingleScan(trivyBin, image, outFile string, options scanExecOptions) (sc
 
 	format, formatErr := normalizeReportFormat(options.ReportFormat)
 	if formatErr != nil {
-		return summary, severity, explanations, formatErr
+		return summary, severity, explanations, parsed, formatErr
 	}
 	report, reportErr := buildReportContent(format, image, time.Now(), summary, severity, explanations, trivyStderr, parsed, trivyStdout)
 	if reportErr != nil {
-		return summary, severity, explanations, reportErr
+		return summary, severity, explanations, parsed, reportErr
 	}
 
 	if writeErr := os.WriteFile(outFile, []byte(report), 0644); writeErr != nil {
-		return summary, severity, explanations, fmt.Errorf("failed to write report: %w", writeErr)
+		return summary, severity, explanations, parsed, fmt.Errorf("failed to write report: %w", writeErr)
 	}
 	if err != nil {
-		return summary, severity, explanations, fmt.Errorf("trivy command failed: %w", err)
+		return summary, severity, explanations, parsed, fmt.Errorf("trivy command failed: %w", err)
 	}
-	return summary, severity, explanations, nil
+	return summary, severity, explanations, parsed, nil
+}
+
+type baselineReportPayload struct {
+	TrivyReport *trivyReport  `json:"trivy_report"`
+	Results     []trivyResult `json:"Results"`
+}
+
+func loadBaselineReport(path string) (trivyReport, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return trivyReport{}, err
+	}
+
+	var payload baselineReportPayload
+	if err := json.Unmarshal(content, &payload); err != nil {
+		return trivyReport{}, fmt.Errorf("baseline must be JSON created by docker-otty (--format json) or raw Trivy JSON: %w", err)
+	}
+
+	if payload.TrivyReport != nil {
+		return *payload.TrivyReport, nil
+	}
+	if payload.Results != nil {
+		return trivyReport{Results: payload.Results}, nil
+	}
+	return trivyReport{}, errors.New("baseline report does not contain a Trivy report payload")
+}
+
+func forEachReportFinding(report trivyReport, visit func(target, kind string, finding trivyFinding)) {
+	for _, result := range report.Results {
+		target := firstNonEmpty(result.Target, "unknown-target")
+		for _, finding := range result.Vulnerabilities {
+			visit(target, "vulnerability", finding)
+		}
+		for _, finding := range result.Secrets {
+			visit(target, "secret", finding)
+		}
+		for _, finding := range result.Misconfigurations {
+			visit(target, "misconfiguration", finding)
+		}
+	}
+}
+
+func findingIdentity(target, kind string, finding trivyFinding) string {
+	id := firstNonEmpty(finding.VulnerabilityID, finding.ID, finding.AVDID, finding.Title, "unspecified-id")
+	parts := []string{
+		strings.ToLower(strings.TrimSpace(kind)),
+		strings.ToLower(strings.TrimSpace(target)),
+		strings.ToLower(strings.TrimSpace(finding.PkgName)),
+		strings.ToLower(strings.TrimSpace(id)),
+		strings.ToUpper(strings.TrimSpace(finding.Severity)),
+		strings.ToLower(strings.TrimSpace(finding.InstalledVersion)),
+		strings.ToLower(strings.TrimSpace(finding.FixedVersion)),
+	}
+	return strings.Join(parts, "|")
+}
+
+func addSeverityCount(severity *severityCounts, raw string) {
+	switch strings.ToUpper(strings.TrimSpace(raw)) {
+	case "CRITICAL":
+		severity.Critical++
+	case "HIGH":
+		severity.High++
+	case "MEDIUM":
+		severity.Medium++
+	case "LOW":
+		severity.Low++
+	case "UNKNOWN":
+		severity.Unknown++
+	default:
+		if strings.TrimSpace(raw) != "" {
+			severity.Unknown++
+		}
+	}
+}
+
+func formatNewFindingExplanation(target, kind string, finding trivyFinding) string {
+	level := strings.ToUpper(strings.TrimSpace(finding.Severity))
+	if level == "" {
+		level = "UNKNOWN"
+	}
+	id := firstNonEmpty(finding.VulnerabilityID, finding.ID, finding.AVDID, "UNSPECIFIED-ID")
+	pkg := firstNonEmpty(finding.PkgName, "unknown-package")
+	return fmt.Sprintf("[%s] new %s: %s in %s (%s)", level, kind, pkg, target, id)
+}
+
+func compareNewFindings(current, baseline trivyReport, limit int) (severityCounts, []string, int) {
+	baselineSet := make(map[string]struct{})
+	forEachReportFinding(baseline, func(target, kind string, finding trivyFinding) {
+		baselineSet[findingIdentity(target, kind, finding)] = struct{}{}
+	})
+
+	records := make([]riskExplanation, 0)
+	seenNew := make(map[string]struct{})
+	severity := severityCounts{}
+	newCount := 0
+	forEachReportFinding(current, func(target, kind string, finding trivyFinding) {
+		key := findingIdentity(target, kind, finding)
+		if _, exists := baselineSet[key]; exists {
+			return
+		}
+		if _, exists := seenNew[key]; exists {
+			return
+		}
+		seenNew[key] = struct{}{}
+		newCount++
+		addSeverityCount(&severity, finding.Severity)
+		records = append(records, riskExplanation{
+			Severity: severityScore(finding.Severity),
+			Text:     formatNewFindingExplanation(target, kind, finding),
+		})
+	})
+
+	sort.Slice(records, func(i, j int) bool {
+		if records[i].Severity != records[j].Severity {
+			return records[i].Severity > records[j].Severity
+		}
+		return records[i].Text < records[j].Text
+	})
+
+	if limit <= 0 {
+		limit = 5
+	}
+	out := make([]string, 0, limit)
+	seenText := make(map[string]struct{})
+	for _, rec := range records {
+		if _, ok := seenText[rec.Text]; ok {
+			continue
+		}
+		seenText[rec.Text] = struct{}{}
+		out = append(out, rec.Text)
+		if len(out) >= limit {
+			break
+		}
+	}
+
+	return severity, out, newCount
 }
 
 func buildReportContent(format, image string, runAt time.Time, summary scanSummary, severity severityCounts, explanations []string, trivyStderr string, parsed trivyReport, trivyRaw string) (string, error) {

@@ -1,6 +1,12 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
 
 func TestNormalizeReportFormat(t *testing.T) {
 	tests := []struct {
@@ -143,5 +149,141 @@ func TestIsValidImageNameDigest(t *testing.T) {
 	}
 	if isValidImageName("bad image") {
 		t.Fatalf("expected image name with spaces to be invalid")
+	}
+}
+
+func TestCompareNewFindings(t *testing.T) {
+	baseline := trivyReport{
+		Results: []trivyResult{
+			{
+				Target: "alpine:3.18",
+				Vulnerabilities: []trivyFinding{
+					{VulnerabilityID: "CVE-1111", PkgName: "openssl", Severity: "HIGH", InstalledVersion: "1.0.0"},
+				},
+			},
+		},
+	}
+	current := trivyReport{
+		Results: []trivyResult{
+			{
+				Target: "alpine:3.18",
+				Vulnerabilities: []trivyFinding{
+					{VulnerabilityID: "CVE-1111", PkgName: "openssl", Severity: "HIGH", InstalledVersion: "1.0.0"},
+					{VulnerabilityID: "CVE-2222", PkgName: "musl", Severity: "CRITICAL", InstalledVersion: "2.0.0"},
+				},
+				Secrets: []trivyFinding{
+					{ID: "SECRET-42", PkgName: "config", Severity: "MEDIUM"},
+				},
+			},
+		},
+	}
+
+	severity, explanations, newCount := compareNewFindings(current, baseline, 5)
+	if newCount != 2 {
+		t.Fatalf("newCount=%d, want 2", newCount)
+	}
+	if severity.Critical != 1 || severity.Medium != 1 || severity.High != 0 {
+		t.Fatalf("unexpected new-finding severity breakdown: %+v", severity)
+	}
+	if len(explanations) == 0 {
+		t.Fatalf("expected at least one explanation")
+	}
+	if !strings.Contains(explanations[0], "CVE-2222") {
+		t.Fatalf("expected critical finding to be listed first, got: %q", explanations[0])
+	}
+}
+
+func TestLoadBaselineReportFromDockerOttyJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "baseline.json")
+	content := `{
+  "image": "alpine:latest",
+  "trivy_report": {
+    "Results": [
+      {
+        "Target": "alpine:latest",
+        "Vulnerabilities": [
+          {"VulnerabilityID":"CVE-1234","PkgName":"apk-tools","Severity":"HIGH"}
+        ]
+      }
+    ]
+  }
+}`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write baseline file: %v", err)
+	}
+
+	report, err := loadBaselineReport(path)
+	if err != nil {
+		t.Fatalf("loadBaselineReport returned error: %v", err)
+	}
+	if len(report.Results) != 1 {
+		t.Fatalf("len(report.Results)=%d, want 1", len(report.Results))
+	}
+}
+
+func TestLoadBaselineReportFromRawTrivyJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "baseline-raw.json")
+	content := `{
+  "Results": [
+    {
+      "Target": "nginx:latest",
+      "Vulnerabilities": [
+        {"VulnerabilityID":"CVE-9999","PkgName":"libssl","Severity":"CRITICAL"}
+      ]
+    }
+  ]
+}`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write baseline file: %v", err)
+	}
+
+	report, err := loadBaselineReport(path)
+	if err != nil {
+		t.Fatalf("loadBaselineReport returned error: %v", err)
+	}
+	if len(report.Results) != 1 {
+		t.Fatalf("len(report.Results)=%d, want 1", len(report.Results))
+	}
+}
+
+func TestFindLatestBaselineReportForImage(t *testing.T) {
+	dir := t.TempDir()
+	image := "nginx:latest"
+	base := sanitizeScanFileName(image)
+
+	oldPath := filepath.Join(dir, base+"-scan-20250101-010101.json")
+	newPath := filepath.Join(dir, base+"-scan-20250101-020202.json")
+	if err := os.WriteFile(oldPath, []byte("{}"), 0644); err != nil {
+		t.Fatalf("failed to write old baseline: %v", err)
+	}
+	if err := os.WriteFile(newPath, []byte("{}"), 0644); err != nil {
+		t.Fatalf("failed to write new baseline: %v", err)
+	}
+
+	oldTime := time.Now().Add(-2 * time.Hour)
+	newTime := time.Now().Add(-1 * time.Hour)
+	if err := os.Chtimes(oldPath, oldTime, oldTime); err != nil {
+		t.Fatalf("failed to set old baseline mod time: %v", err)
+	}
+	if err := os.Chtimes(newPath, newTime, newTime); err != nil {
+		t.Fatalf("failed to set new baseline mod time: %v", err)
+	}
+
+	got, err := findLatestBaselineReportForImage(dir, image)
+	if err != nil {
+		t.Fatalf("findLatestBaselineReportForImage returned error: %v", err)
+	}
+	if got != newPath {
+		t.Fatalf("got %q, want %q", got, newPath)
+	}
+
+	missing, err := findLatestBaselineReportForImage(dir, "alpine:3.18")
+	if err != nil {
+		t.Fatalf("findLatestBaselineReportForImage (missing) returned error: %v", err)
+	}
+	if missing != "" {
+		t.Fatalf("expected empty path for missing baseline, got %q", missing)
 	}
 }

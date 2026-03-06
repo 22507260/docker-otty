@@ -26,11 +26,11 @@
 
 ## Why docker-otty?
 
-- 🚀 Runs as a native Docker CLI plugin: `docker otty ...`
-- 📄 Produces practical reports in `txt`, `json`, or `md`
-- 🏃 Supports single, multi-image, and daemon scan modes
-- ✅ Adds CI gate controls for fail-fast pipelines
-- 🔍 Can scan explicit image lists, installed container images, and running container images
+- Runs as a native Docker CLI plugin: `docker otty ...`
+- Produces practical reports in `txt`, `json`, or `md`
+- Supports single, multi-image, and daemon scan modes
+- Adds CI gate controls for fail-fast pipelines
+- Can scan explicit image lists, installed container images, and running container images
 
 ## Quick Start
 ### Prerequisites
@@ -82,6 +82,16 @@ docker otty run nginx:latest --format json --top 10
 docker otty multi --images nginx:latest,alpine:3.18 --workers 4 --fail-on high --exit-code 9
 ```
 
+### Baseline drift gate (fail only on newly introduced risk)
+```bash
+docker otty run nginx:latest --format json --baseline ./scan-results/previous-run.json --fail-on-new high --max-new-medium 2
+```
+
+### Multi-image baseline drift gate
+```bash
+docker otty multi --images nginx:latest,alpine:3.18 --baseline-dir ./scan-results --fail-on-new high --baseline-required --exit-code 9
+```
+
 ### Scan installed container images (`docker ps -a`)
 ```bash
 docker otty multi --containers
@@ -101,7 +111,7 @@ docker otty daemon --running-containers --once
 Sample [`config.yaml`](config.yaml):
 
 ```yaml
-trivy_url: "./trivy_0.69.1_windows-64bit.zip"
+trivy_url: "https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_windows-64bit.zip"
 scan_images:
   - "nginx:latest"
   - "alpine:3.18"
@@ -123,6 +133,11 @@ Config field details are documented in [`docs/CONFIG.md`](docs/CONFIG.md).
 CI gate flags:
 - `--fail-on high|critical|none`
 - `--max-medium <n>`
+- `--baseline <report.json>`
+- `--baseline-dir <dir>`
+- `--baseline-required`
+- `--fail-on-new high|critical|none`
+- `--max-new-medium <n>`
 - `--exit-code <n>`
 - Use `--no-input` for non-interactive environments
 
@@ -141,3 +156,4 @@ CI gate flags:
 
 ## License
 MIT - see [`LICENSE`](LICENSE).
+

@@ -1,4 +1,4 @@
-trivy_url: "./trivy_0.69.1_windows-64bit.zip"
+trivy_url: "https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_windows-64bit.zip"
 scan_images:
   - "nginx:latest"
   - "alpine:3.18"

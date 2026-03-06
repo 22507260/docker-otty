@@ -14,7 +14,7 @@
 
 ## Example
 ```yaml
-trivy_url: "./trivy_0.69.1_windows-64bit.zip"
+trivy_url: "https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_windows-64bit.zip"
 scan_images:
   - "nginx:latest"
   - "alpine:3.18"
@@ -23,6 +23,8 @@ scan_running_containers: true
 interval: 1800
 output_dir: "./scan-results"
 ```
+
+You can also set `trivy_url` to a local ZIP path.
 
 ## Selection Behavior
 - `run`: scans only the image provided in CLI.
@@ -33,3 +35,4 @@ output_dir: "./scan-results"
 - Image names are validated before scanning.
 - Duplicate image names are automatically removed.
 - Invalid image entries are skipped (daemon) or cause errors (run/multi normalization path).
+

@@ -26,11 +26,15 @@ docker otty run <image> [options]
 | `--scanners <csv>` | Trivy scanners (for example `vuln,misconfig`) |
 | `--fail-on <high|critical|none>` | CI gate severity level |
 | `--max-medium <n>` | CI gate medium threshold |
+| `--baseline <report.json>` | Baseline report for new-finding comparison (`docker-otty json` or raw Trivy JSON) |
+| `--fail-on-new <high|critical|none>` | New-finding CI gate severity level (requires `--baseline`) |
+| `--max-new-medium <n>` | New-finding medium threshold (requires `--baseline`) |
 | `--exit-code <n>` | Exit code when CI gate fails |
 
 ### Example
 ```bash
 docker otty run nginx:latest --format md --top 10 --fail-on critical
+docker otty run nginx:latest --format json --baseline ./scan-results/previous-run.json --fail-on-new high --max-new-medium 2
 ```
 
 ## `multi` Command
@@ -55,6 +59,10 @@ docker otty multi [image1 image2 ...] [options]
 | `--scanners <csv>` | Trivy scanners |
 | `--fail-on <high|critical|none>` | CI gate severity level |
 | `--max-medium <n>` | CI gate medium threshold |
+| `--baseline-dir <dir>` | Baseline report directory for per-image drift comparison |
+| `--baseline-required` | Fail when an image baseline cannot be found or parsed |
+| `--fail-on-new <high|critical|none>` | New-finding CI gate severity level (requires `--baseline-dir`) |
+| `--max-new-medium <n>` | New-finding medium threshold (requires `--baseline-dir`) |
 | `--exit-code <n>` | Exit code when CI gate fails |
 
 ### Examples
@@ -62,6 +70,7 @@ docker otty multi [image1 image2 ...] [options]
 docker otty multi --images nginx:latest,alpine:3.18 --workers 4
 docker otty multi --containers
 docker otty multi --running-containers
+docker otty multi --images nginx:latest,alpine:3.18 --baseline-dir ./scan-results --fail-on-new high --baseline-required --exit-code 9
 ```
 
 ## `daemon` Command

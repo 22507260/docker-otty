@@ -2,5 +2,6 @@ package main
 
 // ...existing code...
 
-// Bu dosya, Docker Scanner projesinin temel yapılandırma ve kullanım örneklerini içerir.
-// Daha fazla bilgi için README.md dosyasına bakınız.
+// This file contains the core configuration and usage examples for the Docker Scanner project.
+// For more details, see README.md.
+
