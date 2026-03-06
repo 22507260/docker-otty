@@ -89,6 +89,20 @@ type commandError struct {
 	exitCode int
 }
 
+type doctorCheck struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Hint    string `json:"hint,omitempty"`
+}
+
+type doctorReport struct {
+	RunAt      string        `json:"run_at"`
+	ConfigPath string        `json:"config_path"`
+	Strict     bool          `json:"strict"`
+	Checks     []doctorCheck `json:"checks"`
+}
+
 func (e *commandError) Error() string {
 	return e.message
 }
@@ -222,6 +236,11 @@ func main() {
 		}
 	case "daemon":
 		if err := daemonCommand(args[1:], opts); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(exitCodeForError(err))
+		}
+	case "doctor":
+		if err := doctorCommand(args[1:], opts); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(exitCodeForError(err))
 		}
@@ -493,6 +512,7 @@ func printHelp() {
 	fmt.Println("  docker otty run <image>      Scan one image")
 	fmt.Println("  docker otty multi <images>   Scan multiple images once")
 	fmt.Println("  docker otty daemon           Start periodic scans from config")
+	fmt.Println("  docker otty doctor           Run environment and config diagnostics")
 	fmt.Println("  docker otty version          Show plugin version")
 	fmt.Println("  docker otty help             Show help")
 	fmt.Println("")
@@ -518,6 +538,7 @@ func printHelp() {
 	fmt.Println("  --max-new-medium New-finding gate: maximum allowed medium findings (requires baseline)")
 	fmt.Println("  --exit-code      Exit code to return when CI gate fails")
 	fmt.Println("  --once           Run daemon only once")
+	fmt.Println("  --strict         Doctor mode: treat warnings as failures")
 }
 
 func printPluginMetadata() {
@@ -543,9 +564,10 @@ func interactiveMainMenu(opts appOptions) {
 		fmt.Println("2) Multiple scan (multi)")
 		fmt.Println("3) Daemon mode")
 		fmt.Println("4) Help")
-		fmt.Println("5) Exit")
+		fmt.Println("5) Doctor")
+		fmt.Println("6) Exit")
 
-		choice := strings.ToLower(strings.TrimSpace(askNonEmpty("Choose an option (1/2/3/4/5)")))
+		choice := strings.ToLower(strings.TrimSpace(askNonEmpty("Choose an option (1/2/3/4/5/6)")))
 		switch choice {
 		case "1":
 			if err := runCommand(nil, opts); err != nil {
@@ -561,7 +583,11 @@ func interactiveMainMenu(opts appOptions) {
 			}
 		case "4":
 			printHelp()
-		case "5", "q", "quit", "exit":
+		case "5":
+			if err := doctorCommand(nil, opts); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+			}
+		case "6", "q", "quit", "exit":
 			fmt.Println("Exiting interactive mode.")
 			return
 		default:
@@ -1689,6 +1715,292 @@ func daemonCommand(args []string, opts appOptions) error {
 		}
 		time.Sleep(time.Duration(interval) * time.Second)
 	}
+}
+
+func doctorCommand(args []string, opts appOptions) error {
+	_ = opts
+	configPath := "config.yaml"
+	format := "txt"
+	strict := false
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--config":
+			if i+1 >= len(args) {
+				return errors.New("--config requires a file path")
+			}
+			configPath = args[i+1]
+			i++
+		case "--format":
+			if i+1 >= len(args) {
+				return errors.New("--format requires a value (txt|json)")
+			}
+			normalized, err := normalizeDoctorFormat(args[i+1])
+			if err != nil {
+				return err
+			}
+			format = normalized
+			i++
+		case "--strict":
+			strict = true
+		case "--help", "-h":
+			fmt.Println("Usage: docker otty doctor [--config <path>] [--format <txt|json>] [--strict]")
+			return nil
+		default:
+			return fmt.Errorf("unknown doctor argument: %s", args[i])
+		}
+	}
+
+	checks := make([]doctorCheck, 0, 8)
+	cfg, cfgErr := config.LoadConfig(configPath)
+	if cfgErr != nil {
+		checks = append(checks, doctorCheck{
+			Name:    "config",
+			Status:  "fail",
+			Message: fmt.Sprintf("failed to load config file: %v", cfgErr),
+			Hint:    "Pass --config <path> or create config.yaml in the working directory.",
+		})
+	} else {
+		checks = append(checks, doctorCheck{
+			Name:    "config",
+			Status:  "pass",
+			Message: fmt.Sprintf("config loaded from %s", configPath),
+		})
+
+		if strings.TrimSpace(cfg.TrivyURL) == "" {
+			checks = append(checks, doctorCheck{
+				Name:    "trivy_url",
+				Status:  "fail",
+				Message: "trivy_url is empty in config",
+				Hint:    "Set trivy_url to a local ZIP path or a Trivy release URL.",
+			})
+		} else if looksLikeRemoteURL(cfg.TrivyURL) {
+			checks = append(checks, doctorCheck{
+				Name:    "trivy_url",
+				Status:  "pass",
+				Message: "trivy_url is a remote download source",
+			})
+		} else if _, statErr := os.Stat(cfg.TrivyURL); statErr == nil {
+			checks = append(checks, doctorCheck{
+				Name:    "trivy_url",
+				Status:  "pass",
+				Message: "trivy_url points to an existing local archive",
+			})
+		} else {
+			checks = append(checks, doctorCheck{
+				Name:    "trivy_url",
+				Status:  "warn",
+				Message: fmt.Sprintf("trivy_url local file was not found: %s", cfg.TrivyURL),
+				Hint:    "If this value is a release asset name, first run will try auto-download.",
+			})
+		}
+
+		outDir, outErr := resolveOutputDir(cfg.OutputDir)
+		if outErr != nil {
+			checks = append(checks, doctorCheck{
+				Name:    "output_dir",
+				Status:  "fail",
+				Message: fmt.Sprintf("output directory is not writable: %v", outErr),
+				Hint:    "Update output_dir in config to a writable location.",
+			})
+		} else {
+			checks = append(checks, doctorCheck{
+				Name:    "output_dir",
+				Status:  "pass",
+				Message: fmt.Sprintf("report output directory is writable: %s", outDir),
+			})
+		}
+	}
+
+	dockerBin, dockerErr := exec.LookPath("docker")
+	if dockerErr != nil {
+		checks = append(checks, doctorCheck{
+			Name:    "docker_binary",
+			Status:  "fail",
+			Message: "docker binary not found in PATH",
+			Hint:    "Install Docker Desktop / Docker CLI and ensure docker is in PATH.",
+		})
+	} else {
+		checks = append(checks, doctorCheck{
+			Name:    "docker_binary",
+			Status:  "pass",
+			Message: fmt.Sprintf("docker binary found: %s", dockerBin),
+		})
+
+		version, versionErr := dockerServerVersion(dockerBin)
+		if versionErr != nil {
+			checks = append(checks, doctorCheck{
+				Name:    "docker_daemon",
+				Status:  "warn",
+				Message: fmt.Sprintf("docker daemon check failed: %v", versionErr),
+				Hint:    "Start Docker Desktop and retry doctor.",
+			})
+		} else {
+			checks = append(checks, doctorCheck{
+				Name:    "docker_daemon",
+				Status:  "pass",
+				Message: fmt.Sprintf("docker daemon reachable (server version: %s)", version),
+			})
+		}
+	}
+
+	localTrivy := firstExistingFile("trivy.exe", "trivy")
+	if localTrivy == "" {
+		checks = append(checks, doctorCheck{
+			Name:    "local_trivy_binary",
+			Status:  "warn",
+			Message: "local trivy binary was not found in working directory",
+			Hint:    "Run any scan once to auto-prepare Trivy, or place trivy.exe beside docker-otty.",
+		})
+	} else {
+		checks = append(checks, doctorCheck{
+			Name:    "local_trivy_binary",
+			Status:  "pass",
+			Message: fmt.Sprintf("local trivy binary found: %s", localTrivy),
+		})
+	}
+
+	report := doctorReport{
+		RunAt:      time.Now().Format(time.RFC3339),
+		ConfigPath: configPath,
+		Strict:     strict,
+		Checks:     checks,
+	}
+	printDoctorReport(report, format)
+
+	hasFailures := doctorHasFailures(checks)
+	hasWarnings := doctorHasWarnings(checks)
+	if hasFailures || (strict && hasWarnings) {
+		if hasFailures {
+			return &commandError{
+				message:  "doctor detected failing checks",
+				exitCode: 1,
+			}
+		}
+		return &commandError{
+			message:  "doctor strict mode failed due to warning checks",
+			exitCode: 1,
+		}
+	}
+	return nil
+}
+
+func normalizeDoctorFormat(value string) (string, error) {
+	format := strings.ToLower(strings.TrimSpace(value))
+	if format == "" {
+		return "txt", nil
+	}
+	switch format {
+	case "txt", "json":
+		return format, nil
+	default:
+		return "", fmt.Errorf("invalid doctor format: %s (allowed: txt, json)", value)
+	}
+}
+
+func doctorHasFailures(checks []doctorCheck) bool {
+	for _, check := range checks {
+		if strings.EqualFold(strings.TrimSpace(check.Status), "fail") {
+			return true
+		}
+	}
+	return false
+}
+
+func doctorHasWarnings(checks []doctorCheck) bool {
+	for _, check := range checks {
+		if strings.EqualFold(strings.TrimSpace(check.Status), "warn") {
+			return true
+		}
+	}
+	return false
+}
+
+func printDoctorReport(report doctorReport, format string) {
+	if strings.EqualFold(format, "json") {
+		data, err := json.MarshalIndent(report, "", "  ")
+		if err != nil {
+			fmt.Println(`{"error":"failed to serialize doctor report"}`)
+			return
+		}
+		fmt.Println(string(data))
+		return
+	}
+
+	fmt.Println("Docker OTTY Doctor")
+	fmt.Printf("Run At: %s\n", report.RunAt)
+	fmt.Printf("Config: %s\n", report.ConfigPath)
+	fmt.Printf("Strict: %t\n", report.Strict)
+	fmt.Println("")
+	for _, check := range report.Checks {
+		status := strings.ToUpper(strings.TrimSpace(check.Status))
+		if status == "" {
+			status = "UNKNOWN"
+		}
+		fmt.Printf("[%s] %s: %s\n", status, check.Name, check.Message)
+		if strings.TrimSpace(check.Hint) != "" {
+			fmt.Printf("  hint: %s\n", strings.TrimSpace(check.Hint))
+		}
+	}
+	fmt.Println("")
+	if doctorHasFailures(report.Checks) {
+		fmt.Println("Doctor result: FAIL")
+		return
+	}
+	if report.Strict && doctorHasWarnings(report.Checks) {
+		fmt.Println("Doctor result: FAIL (strict mode)")
+		return
+	}
+	if doctorHasWarnings(report.Checks) {
+		fmt.Println("Doctor result: WARN")
+		return
+	}
+	fmt.Println("Doctor result: PASS")
+}
+
+func dockerServerVersion(dockerBin string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, dockerBin, "version", "--format", "{{.Server.Version}}")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return "", errors.New("docker version timed out")
+		}
+		errText := strings.TrimSpace(stderr.String())
+		if errText == "" {
+			return "", err
+		}
+		return "", fmt.Errorf("%w. stderr: %s", err, errText)
+	}
+
+	version := strings.TrimSpace(stdout.String())
+	if version == "" {
+		return "", errors.New("docker returned empty server version")
+	}
+	return version, nil
+}
+
+func firstExistingFile(paths ...string) string {
+	for _, path := range paths {
+		candidate := strings.TrimSpace(path)
+		if candidate == "" {
+			continue
+		}
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func looksLikeRemoteURL(value string) bool {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	return strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://")
 }
 
 func runSingleScan(trivyBin, image, outFile string, options scanExecOptions) (scanSummary, severityCounts, []string, trivyReport, error) {

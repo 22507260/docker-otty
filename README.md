@@ -68,6 +68,7 @@ docker otty version
 | `run` | Scan one image once | `docker otty run nginx:latest` |
 | `multi` | Scan many images in one execution (parallel capable) | `docker otty multi --images nginx:latest,alpine:3.18 --workers 4` |
 | `daemon` | Repeated periodic scanning | `docker otty daemon --interval 3600` |
+| `doctor` | Run environment/config diagnostics | `docker otty doctor --strict` |
 | `help` | Show all command help | `docker otty help` |
 | `version` | Show plugin version | `docker otty version` |
 
@@ -105,6 +106,12 @@ docker otty multi --running-containers
 ### Daemon mode one cycle
 ```bash
 docker otty daemon --running-containers --once
+```
+
+### Environment diagnostics
+```bash
+docker otty doctor
+docker otty doctor --format json --strict
 ```
 
 ## Configuration
